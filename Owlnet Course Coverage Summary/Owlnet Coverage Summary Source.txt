@@ -1,0 +1,1083 @@
+// ======================== Settings ======================================================
+let topBannerColor = "073763";
+let leftColor = "cfe2f3";
+let middleColor = "fce5cd";
+let rightColor = "d9ead3";
+let leftColWidth = 326.25;
+let rightColWidth = 250;
+
+
+// ======================== Enum dayNames =================================================
+
+enum dayNames {
+  Monday = 0,
+  Tuesday,
+  Wednesday,
+  Thursday,
+  Friday,
+  Saturday,
+  Sunday
+}
+
+let daysOpen = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// ======================== Class Time ====================================================
+// Stores the time of day in seconds and provides some simple methods for working between
+// string and number representations
+// Requirements: None 
+class Time {
+  // constants
+  static readonly SECS_IN_DAY = 86400;
+
+  // attributes 
+  private value: number;
+
+  // ----------- constructor --------------
+  constructor(newVal: number) {
+      // value must corispond to a 24 hour clock. value under -1 or over 86400 is invalid 
+      if (!this.setValue(newVal)) {
+          this.value = -1;
+      }
+  }
+
+  // ----------- mutators -----------------
+  // sets a new value for the time object. NewVal should be in seconds
+  // returns boolean indicator as to wether or not newVal is a valid time
+  setValue(newVal: number): boolean { // only change value if valid on a 24 hour clock
+      if (newVal >= 0 && newVal < Time.SECS_IN_DAY) { // 86400 seconds per day
+          this.value = newVal;
+          return true;
+      }
+      return false;
+  }
+
+  // Sets time object value using a 24 hour clock
+  // returns boolean indicator wether or not arguments are a valid time
+  setFrom24(hour : number,minute : number,second : number){
+    let time = 0; 
+
+    // validate parameter values before continuing
+    if(hour  >= 0 && hour < 24 && minute >= 0 && minute < 60 && second >= 0 && second < 60){
+      time += hour * 3600 + minute * 60 + second;
+      return this.setValue(time);
+    }
+
+    return false;
+  }
+
+
+  // Sets time object value using a 12 hour clock
+  // returns boolean indicator wether or not arguments are a valid time
+  setFrom12(hour : number, minute : number, second : number, amOrPm : string){
+    // ensure parameters contain valid values
+    if (hour > 12 || hour < 1 || minute > 59 || minute < 0 || second > 59 || minute < 0 ||!(amOrPm.toLowerCase().includes("am") || amOrPm.toLowerCase().includes("pm"))){
+      return false;
+    }
+
+    // adjust the hour based on what time of day it is. Midnight == 0 hour, afternoons
+    // require 12 hours to be added to clock 
+    if(amOrPm.toLowerCase().includes("am") && hour == 12){
+      hour = 0; 
+    } 
+    else if (amOrPm.toLowerCase().includes("pm") && hour != 12) {
+      hour += 12;
+    }
+
+    // time is now in 24 hour format and can be assigned by setFrom24() 
+    return this.setFrom24(hour,minute,second);
+  }
+
+
+  // --------- Accessors -----------------
+  // get time returns the raw second value of the time object
+  getValue(){
+    return this.value;
+  }
+
+  // gets the 24 based hour of the day
+  getHour24(){
+    return Math.floor(this.value/3600);
+  }
+
+  // gets the 12 based hour of the day
+  getHour12(){
+    let hour = this.getHour24();
+    if(hour > 12){ // convert from 24 hour base to 12 hour base 
+      hour -= 12;
+    } else if (hour == 0){// convert midnight (0) to midnight (12)
+      hour = 12;
+    }
+    return hour;
+  }
+
+  // gets the shortest meaningful string representation of the time object in 12 hour format
+  toMicro12Str(){
+    let str = this.getHour12().toString();
+    if(this.getMinute()>0){
+      str += ":";
+      if(this.getMinute()<10){
+        str+="0";
+      }
+      str+=this.getMinute();
+    }
+    return str;
+  }
+
+  // gets the minute in the current hour
+  getMinute(){
+    let seconds = this.value % 3600; // get the number of seconds from current value
+    return Math.floor(seconds / 60); // convert seconds to whole minutes
+  }
+
+  // gets the second in the second in the current minute
+  getSecond(){
+    return this.value % 60;
+  }
+
+  // gets the maridian designator for 12 hour style timing
+  getMaridian(){
+    if(this.getValue() >= 43200){
+      return "pm";
+    }
+    return "am"; 
+  }
+}
+
+
+// ======================== Class LAShift =============================================
+// class represents a single contiguous shift for a learning assistant, with a start time and stop time
+class Shift { 
+  private startTime : Time;
+  private stopTime :  Time;
+
+  constructor(startTime : Time, stopTime : Time){
+    this.startTime = startTime;
+    this.stopTime = stopTime;
+  }
+
+  // takes a time object and determines if the time occurs during the shift
+  isActive(time : Time){
+    if(this.startTime.getValue() <= time.getValue() && time.getValue() < this.stopTime.getValue()){
+      return true;
+    }
+    return false; 
+  }
+
+  toString(){
+    return this.startTime.getHour24() + ":" + this.startTime.getMinute() + ":" + this.startTime.getSecond() +
+      "-" + this.stopTime.getHour24() + ":" + this.stopTime.getMinute() + ":" + this.stopTime.getSecond();
+  }
+
+  toMicro12Str(){
+    return this.startTime.toMicro12Str() + "-" + this.stopTime.toMicro12Str();
+  }
+}
+
+// class is a grouping of shifts categorized by day
+class DaySchedule {
+  private dayName: String;
+  private shifts: Shift[];
+
+  constructor(dayName: String, shifts: Shift[]) {
+    this.dayName = dayName;
+    this.shifts = [];
+    if(shifts != undefined){
+      for(let i = 0; i < shifts.length; i++){
+        this.shifts.push(shifts[i]);
+      }
+    }
+  }
+
+  addShift(shift: Shift) {
+    this.shifts.push(shift);
+  }
+
+  getDayName() {
+    return this.dayName;
+  }
+
+  setDayName(dayName: string) {
+    this.dayName = dayName;
+  }
+
+  isActive(time : Time){
+    for(let i = 0; i < this.shifts.length; i++){
+      if(this.shifts[i].isActive(time)){
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getShifts(){
+    return this.shifts;
+  }
+
+  toString(){
+    let str : string = "";
+    for(let i = 0; i < this.shifts.length; i++){
+      str+=this.shifts[i].toString() + "\n";
+    }
+    return str;
+  }
+}
+ 
+
+
+
+// ======================== Class LASchedule =============================================
+// Represents a learning assistants weekly schedule 
+class WeekSchedule{
+  public static readonly dayNames = dayNames;
+  private days : DaySchedule[];
+
+  constructor(days : DaySchedule[]){
+    this.days = days;
+  }
+
+  // searches for a daySchedule object by name and returns it. Returns undefined if day is not found
+  getDayByName(dayName : string){
+    let dayIdx = -1; 
+    // search the day name within days array
+    for(let i = 0; i<this.days.length; i++){
+      if(this.days[i].getDayName().toLowerCase().includes(dayName.toLowerCase())){
+        return this.days[i];
+      }
+    }
+    return undefined;
+  }
+
+  // searches for a daySchedule object by index number and returns it. Returns undefined if out of bounds
+  getDayByIdx(dayNum : number){
+    if(dayNum >= 0 && dayNum < this.days.length){
+      return this.days[dayNum];
+    }
+    return undefined; 
+  }
+
+  //---------------------------------getters-----------------------------------------------
+  // uses a day and a time object to identify if a shift is active
+  isActive(day : string, time : Time){
+    if(this.getDayByName(day)!= undefined){
+      return this.getDayByName(day).isActive(time);
+    }
+    return false; 
+  }
+
+  toString(){
+    let str : string = "";
+    for(let i = 0; i < this.days.length; i++){
+      str += this.days[i].getDayName() + "\n" + this.days[i].toString();
+    }
+    return str;
+  }
+}
+
+class Staff{
+  name : string;
+  schedule : WeekSchedule; 
+
+  constructor(name : string, schedule : WeekSchedule){
+    this.name = name;
+    this.schedule = schedule;
+  }
+
+  isActive(day : string, time : Time){
+    return this.schedule.isActive(day, time);
+  }
+
+  toString(){
+    return this.name + "\n" + this.schedule.toString();
+  }
+}
+
+class Course{
+  name : string;
+  bookingsLink : string; 
+  assistants : Staff[];
+
+  constructor(name : string, assistants : Staff[] = undefined, link : string = undefined){
+    this.name = name;
+    this.assistants = [];
+    if(assistants != undefined){
+      this.assistants = assistants;
+    }
+    if(link != undefined){
+      this.bookingsLink = link; 
+    }
+  }
+
+  addAssistant(assistant : Staff){
+    if(assistant != undefined){
+      this.assistants.push(assistant);
+    }
+  }
+
+  coveredByStrs(){
+    let strs : string[] = [];
+    for(let i = 0; i < this.assistants.length; i++){
+      strs.push(this.assistants[i].name);
+    }
+    return strs; 
+  }
+
+  hasCoverage(day : string = undefined, time : Time = undefined) : boolean {
+    // function treats omitted arguments as a general request for coverage
+    if(day == undefined || time == undefined){
+      if(this.assistants.length > 0){
+        return  true;
+      }
+    }
+    // if a day and time were specified, function returns coverage status for that date and time
+    else {
+      for(let i = 0; i < this.assistants.length; i++){
+        if(this.assistants[i].isActive(day, time)){
+          return true;
+        } 
+      }
+    }
+
+    return false; 
+  }
+
+  getDayCoverage(day : string){
+    let shifts : Shift[] = [];
+    let startTime = -1;
+  
+    for (let time = 0; time < 86400; time+=60){
+      if(this.hasCoverage(day, new Time(time))){
+        if(startTime == -1){
+          startTime = time;
+        }
+      } else if (startTime != -1){
+        shifts.push(new Shift(new Time(startTime), new Time(time)));
+        startTime = -1;
+      }
+    }
+    return new DaySchedule(day, shifts);
+  }
+  
+  getWeekCoverage(){
+    let days = ["Monday", "Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+    let week : DaySchedule[] = [];
+    for(let day in days){
+      week.push(this.getDayCoverage(days[day]));
+    }
+    return new WeekSchedule(week);
+  }
+
+  xlBookingsHyperlink() : string {
+    let nameWords = this.name.split(" ");
+    return '=HYPERLINK("'+this.bookingsLink +'","Book Remote Session For ' + nameWords[0] + " " + nameWords[1] +'")';
+  }
+
+  setBookingsLink(link : string){
+    this.bookingsLink = link;
+  }
+ 
+  toString() : string {
+    let str = this.name + "\n";
+    for(let i = 0; i < this.assistants.length; i++){
+      str += this.assistants[i].toString();
+    }
+    return str;
+  }
+}
+
+//============== function to build learning assistant from schedule workbook ===================
+function buildLAFromLCWorkbook(daysOpen : string[], scheduleSheetLine : string[]){
+  let name = scheduleSheetLine[0].trim();
+  let scheduleStrs = scheduleSheetLine.slice(1);
+  let schedule : DaySchedule[] = [];
+ 
+  // create a week schedule from the schedule sheet
+  for(let dayNum = 0; dayNum < daysOpen.length; dayNum++){
+    if (scheduleStrs[dayNum] != undefined && scheduleStrs[dayNum] != ""){
+      schedule.push(new DaySchedule(daysOpen[dayNum],getLCDayShifts(scheduleStrs[dayNum])));
+    }
+  }
+  return new Staff(name, new WeekSchedule(schedule));
+}
+
+// given a learning center style string notation of shifts, converts in to shift objects and returns
+function getLCDayShifts(value : string){
+  let shifts : Shift[] = [];
+  let values = value.split(";");
+  for(let i = 0; i < values.length; i++){
+    if(values[i].includes("-")){
+
+      shifts.push(new Shift(setFromLCShortStr(values[i].split("-")[0]), 
+      setFromLCShortStr(values[i].split("-")[1])));
+    }
+  }
+
+  return shifts;
+}
+
+function setFromLCShortStr(value : string){
+  // variable 
+  let hour = 0;
+  let minute = 0;
+  let second = 0; // schedule never contains second data, used for argument resolution 
+
+  // assign hour information  
+  hour = parseInt(value.split(":")[0]);
+
+  // determine if string contains minute information 
+  // and assign values appropriately  
+  if (value.includes(":")) {
+    minute = parseInt(value.split(":")[1]);
+  }
+
+  // LC short notation assumes that any hour value before 8 (when the LC opens) is in the afternoon 
+  if (hour < 8) {
+    hour += 12;
+  }
+
+  // time is now in 24 hour format, parent funcion can set value 
+  let time = new Time(0);
+  time.setFrom24(hour, minute, second);
+  return time;
+} 
+
+
+function buildLearningAssistantsFromWorkbook(schedule : ExcelScript.Worksheet){
+  let scheduleSheetStart = 3; 
+  let transposeSheetStart = 1;
+  let scheduleInStrs = schedule.getUsedRange().getTexts().slice(scheduleSheetStart);
+  let days = scheduleInStrs[0].slice(1);
+  scheduleInStrs = scheduleInStrs.slice(1);
+  let learningAssistants : Staff[] = [];
+  for(let i = 0; i < scheduleInStrs.length; i++){
+    learningAssistants.push(buildLAFromLCWorkbook(days, scheduleInStrs[i]));
+  }  
+  return learningAssistants;
+}
+
+function buildCourses(transposeSheet : ExcelScript.Worksheet, assistants : Staff[], links : xlTable[]){
+  let courseNamesStartRow = 0;
+  let courseNamesStartCol = 1;
+  let assistStartRow = 1;
+  let assistNameCol = 0;
+  let transposeTexts = transposeSheet.getUsedRange().getTexts();
+  let courseNames = transposeTexts[courseNamesStartRow].slice(courseNamesStartCol);
+
+  let courses : Course[] = [];
+  for(let i = 0; i < courseNames.length; i++){
+    if(courseNames[i] != ""){
+      courses.push(new Course(courseNames[i]));
+      // match assistants to their covered courses 
+      if(assistants != undefined){
+        matchCoverage(assistants, courses[courses.length - 1], transposeTexts);
+      }
+      // match booking links to their course
+      for(let j = 0; j < links.length; j++){
+        if(links[j].getRecord(courses[courses.length - 1].name) != undefined){
+          courses[courses.length - 1].setBookingsLink(links[j].getRecord(courses[courses.length - 1].name)[1]);
+        }
+      }
+    }
+  }
+  return courses;
+}
+
+function matchCoverage(assistants : Staff[], course : Course, transpose : string[][]){
+  // variables
+  let assistantIdx: number = undefined;
+  // find course col in transpose sheet. If course can not be found, return
+  let courseColIdx = findColIdx(transpose, course.name);
+  if(courseColIdx == undefined){
+    return; 
+  }
+
+  // step through possible assistants
+  for(let i = 0; i < assistants.length; i++){
+    // find where the current assistant is in transpose sheet
+    assistantIdx = findRowIdx(transpose, assistants[i].name);
+    if(assistantIdx != undefined){ // guard against errors 
+      // check the assistants coverage and add
+      if(transpose[assistantIdx][courseColIdx].toLowerCase().includes('x')){
+        course.addAssistant(assistants[i]);
+      }
+    }
+  }
+}
+
+function findColIdx(arry : string[][], search : string){
+  for(let i = 0; i < arry.length; i++){
+    for(let j = 0; j < arry[i].length; j++){
+      if(arry[i][j].includes(search)){
+        return j; 
+      }
+    }
+  }
+  return undefined; 
+}
+
+function findRowIdx(arry: string[][], search: string) {
+  for (let i = 0; i < arry.length; i++) {
+    for (let j = 0; j < arry[i].length; j++) {
+      if (arry[i][j].includes(search)) {
+        return i;
+      }
+    }
+  }
+  return undefined; 
+}
+
+class OwlnetSchedule {
+
+  static courseRow(course : Course, days : string[] = daysOpen){
+    let coverage = course.getWeekCoverage();
+    let row : string[] = [];
+    row.push(course.name);
+    for(let i = 0; i < days.length; i++){
+      if(coverage.getDayByName(days[i]) != undefined){
+        let tempStr = "";
+        for (let shifts = 0; shifts < coverage.getDayByName(days[i]).getShifts().length; shifts++){
+          if(shifts > 0){
+            tempStr += "; ";
+          }
+          tempStr += coverage.getDayByName(days[i]).getShifts()[shifts].toMicro12Str();
+        }
+        row.push(tempStr);
+      }
+    }
+    // add bookings hyperlink
+    row.push(course.xlBookingsHyperlink());
+    return row; 
+  }
+
+  // adds exception courses that we want displayed on the owlnet schedule sheet
+  // that do not exist in the transpose sheet
+  static transposeOmissions(courses : Course[], links : xlTable[]){
+    let tempCourse : Course = undefined;
+
+    // find english 101 and copy for english courses not defined in transpose
+    for(let i = 0; i < courses.length; i++){
+      if (courses[i].name.toLowerCase() == "ENG 101 English Composition".toLowerCase()){
+        tempCourse = courses[i];
+        break;
+      }
+    }
+
+    if(tempCourse != undefined){
+      // writing assistance (any course) uses learning assistants from english 101
+      courses.push(new Course("Writing Assistance (Any course)",tempCourse.assistants));
+
+      // Accuplacer Reading - College Placement Preparation uses learning assistants from english 101
+      courses.push(new Course("Accuplacer Reading - College Placement Preparation", tempCourse.assistants));
+
+      // ABE/Pre-GED/GED English uses learning assistants from English 101
+      courses.push(new Course("ABE/Pre-GED/GED English", tempCourse.assistants));
+    }
+
+    // find tranisitional math courses and copy for math courses not in transpose
+    tempCourse = undefined;
+    for (let i = 0; i < courses.length; i++) {
+      if (courses[i].name.toLowerCase() == "MATH 003-026 Transitional Math courses (Pre-Algebra and Algebra)".toLowerCase()) {
+        tempCourse = courses[i];
+        break;
+      }
+
+
+    }  
+    if(tempCourse != undefined){
+      // Accuplacer Math - College Placement Preparation
+      courses.push(new Course("Accuplacer Math - College Placement Preparation", tempCourse.assistants));
+
+      // ABE/Pre-GED/GED Math
+      courses.push(new Course("ABE/Pre-GED/GED Math",tempCourse.assistants));
+    }  
+  }
+
+  // adds microsoft bookings links to courses from "owlnet course groups" to each course
+  static assignBookingsLinks(courses : Course[], links : xlTable[]){
+    for (let i = 0; i < courses.length; i++) {
+      for (let j = 0; j < links.length; j++) {
+        if (links[j].getRecord(courses[i].name) != undefined) {
+          courses[i].setBookingsLink(links[j].getRecord(courses[i].name)[1]);
+        }
+      }
+    }
+  }
+
+  // --- Primary Output Function ---
+  // Produes a 2d string array representing the final values for the owlnet schedule worksheet
+  // courses are grouped by 2d string array 
+  static output(courses : Course[], order : xlTable[]) : string[][]{
+    // intalize variables
+    let outputArray : string[][] = [];
+    let groupHeader : string[];
+   
+    // for each group in order
+    for (let groupNum = 0; groupNum < order.length; groupNum++){
+      // add space for later header construction 
+      outputArray.push(["", "", "", "", "", "", "", ""]);
+      
+      // push group name header content first
+      groupHeader = [order[groupNum].headings[0]];
+      groupHeader = groupHeader.concat(daysOpen);
+      outputArray.push(groupHeader);
+      outputArray[outputArray.length - 1].push("Click on link for availability");
+      
+      // step through all of the courses in the group 
+      for (let courseInGroup = 0; courseInGroup < order[groupNum].body.length; courseInGroup++){
+        
+        // find the currently specified course from the group list in the array of all courses  
+        for(let courseNum = 0; courseNum < courses.length; courseNum++){
+          if(courses[courseNum].name.toLowerCase() == order[groupNum].body[courseInGroup][0].toLowerCase()){
+
+            // only add the course if it has coverage sometime this week
+            if(courses[courseNum].hasCoverage()){
+              // add the found course details to the output values array and brea 
+              outputArray.push(this.courseRow(courses[courseNum]));
+              break;
+            }
+          }
+        } 
+      }
+    }
+    return outputArray;
+  }
+}
+
+class WorksheetExtS {
+  sheet: string[][];
+  private tables: string[][][];
+
+  constructor(xlSheet : string[][]) {
+    if (xlSheet != undefined) {
+      this.sheet = xlSheet;
+    } else {
+      return undefined;
+    }
+  }
+
+  getTable(idx : number){
+    if(this.tables.length > idx){
+      return this.tables[idx];
+    }
+    return undefined;
+  }
+
+  getTableCount(){
+    return this.tables.length; 
+  }
+
+// returns true if sheet cotains at least one exact cell containing findMe
+  contains(findMe : string) : boolean{
+    return !(this.rowOf(findMe)==undefined);
+  }
+// searches findMe and returns its zero based row index. returns Undefined if not found
+// findMe : exact string to search for // itr : instance of findme that should be searched
+  rowOf(findMe : string, itr : number = 0) : number {
+    for(let row = 0; row < this.sheet.length; row++){
+      for(let col = 0; col < this.sheet[row].length; col++){
+        if(itr == 0 && this.sheet[row][col] == findMe){
+          return row;
+        }
+      }
+    }
+    return undefined;
+  }
+// searches findMe and returns its zero based column index. Returns undefined if notfound
+// findMe : exact string to search for // itr : instance of find me that should be searched
+  colOf(findMe: string, itr: number = 0) : number {
+    for (let row = 0; row < this.sheet.length; row++) {
+      for (let col = 0; col < this.sheet[row].length; col++) {
+        if (itr == 0 && this.sheet[row][col] == findMe) {
+          return col;
+        }
+      }
+    }
+    return undefined;
+  }
+// returns the given row number as a string array, undefined if row out of bounds
+// rowIdx : zero based index of row
+  getRow(rowIdx : number) : string[]{
+    if(rowIdx >= 0 && rowIdx < this.sheet.length){
+      return this.sheet[rowIdx];
+    }
+    return undefined;
+  }
+// return the row containing key as string array, undefined if key not found
+// key : string to search
+  rowContaining(key : string) : string[] {
+    let rowIdx = this.rowOf(key);
+    if(rowIdx != undefined){
+      return this.getRow(rowIdx);
+    }
+    return undefined;
+  }
+// returns the column at the specified index, undefined if not found. Missing rows filled in by ""
+// colIdx : zero based index of desired column
+  getCol(colIdx : number){
+    let rtrnStrs: string[] = [];
+    let contentFound = false;
+
+    if(colIdx < 0){return undefined;}
+
+    for (let row = 0; row < this.sheet.length; row++) {
+      if (this.sheet[row].length > colIdx) {
+        rtrnStrs.push(this.sheet[row][colIdx]);
+        contentFound = true;
+      } else {
+        rtrnStrs.push("");
+      }
+    }
+    
+    if(contentFound){return rtrnStrs;}
+    
+    return undefined;
+  }
+// return the column containing key as string array, undefined if key not found
+// key : string to search
+  colContaining(key : string) : string[] {
+    let colIdx = this.colOf(key);
+    return this.getCol(colIdx);
+  }
+}
+
+
+class xlTable{
+  headings : string[];
+  body : string[][];
+  keyCol : number;
+  
+  constructor(headings : string[], body:string[][], keyCol : number = 0){
+    this.headings = [];
+    if(headings != undefined){
+      for(let i = 0; i < headings.length; i++){
+        this.headings.push(headings[i]);
+      }
+    }
+
+    this.body = [];
+    if (body != undefined) {
+      for (let i = 0; i < body.length; i++) {
+        this.body.push(body[i]);
+      }
+    }
+
+    this.keyCol = 0;
+    this.setKeyCol(keyCol);
+  }
+
+  getKeyCol() : number{
+    return this.keyCol;
+  }
+
+  setKeyCol(keyCol : number){
+    if(keyCol >= 0){
+      this.keyCol = keyCol;
+    }
+  }
+
+  getRecord(key : string) : string[] {
+    for(let i = 0; i < this.body.length; i++){
+      if(key == this.body[i][this.keyCol]){
+        return this.body[i];
+      }
+    }
+    return undefined; 
+  }
+
+  toString() : string{
+    let tempStr = "";
+    for(let i = 0; i < this.headings.length; i++){
+      tempStr += this.headings[i] + " ";
+    }
+    for(let i = 0; i < this.body.length;i++){
+      tempStr += "\n"
+      for(let j = 0; j < this.body[i].length; j++){
+        tempStr += this.body[i][j].padEnd(this.headings[j].length) + " ";
+      }
+    }
+    return tempStr;
+  }
+}
+
+function makeXlTable(table : ExcelScript.Table, keyCol : number = 0) : xlTable{
+  let texts = table.getRange().getTexts();
+  let tempHeadings : string[] = texts[0];
+  let tempBody : string[][] = [];
+
+  for(let i = 1; i < texts.length; i++){
+    tempBody.push(texts[i]);
+  }
+    return new xlTable(tempHeadings, tempBody ,keyCol);
+}
+
+function makeXlTables(tables : ExcelScript.Table[], keyCols : number[] = undefined) : xlTable[]{
+  let keys : number[] = [];
+  if(keyCols != undefined){
+    if(keyCols.length != tables.length){
+      console.log("makeXLTables: keyCol array length does not match the number of tables passed.");
+      for (let i = 0; i < tables.length; i++) {
+        keys.push(0);
+      }
+    } else {
+      keys = keyCols;
+    }
+  } else {
+    for (let i = 0; i < tables.length; i++) {
+      keys.push(0);
+    }
+  }
+
+  let xlTables : xlTable[] = [];
+  for(let i = 0; i < tables.length; i++){
+    xlTables.push(makeXlTable(tables[i],keys[i]));
+  }
+
+  return xlTables;
+}
+
+// produces a spreadsheet according to "sheet", running layout, styling, format functions on it
+// places it at specified location 
+function output(content: string[][], targetSheetName: string, targetBook: ExcelScript.Workbook) : ExcelScript.Worksheet {
+  // if the sheet already exists, delete it to clear existing data
+  if (targetBook.getWorksheet(targetSheetName) != undefined) {
+    targetBook.getWorksheet(targetSheetName).delete();
+  }
+
+  // create the output worksheet
+  let targetSheet = targetBook.addWorksheet(targetSheetName);
+
+  // set sheet data types
+  format(targetSheet);
+
+  // add data to sheet
+  targetSheet.getRangeByIndexes(0, 0, content.length, content[0].length).setValues(content);
+
+  // find listed courses that don't have scheduled assistants this week but still indicate coverage
+  let unscheduled = findUnscheduled(content);
+
+  for(let i = 0; i < unscheduled.length; i++){
+    targetSheet.getRangeByIndexes(unscheduled[i], 1, 1, daysOpen.length).merge();
+    targetSheet.getRangeByIndexes(unscheduled[i], 1, 1, 1).setValue("Please Check Back Next Week!");
+  }
+
+  // find areas between courses
+  let btwnCourse = findGaps(content);
+
+  // add between course headers
+  for (let i = 0; i < btwnCourse.length; i++) {
+    targetSheet.getRangeByIndexes(btwnCourse[i], 1, 1, 1).setValue("On Campus Walk-In Hours");
+    targetSheet.getRangeByIndexes(btwnCourse[i], 7, 1, 1).setValue("Remote Session Links");
+  }
+
+  // add layout and styling information
+  layout(targetSheet, btwnCourse);
+  styling(targetSheet, btwnCourse);
+
+  // add header to worksheet
+  addHeader(targetSheet);
+
+  // add borders
+  addAllBorders(targetSheet.getUsedRange());
+
+  return targetSheet;
+}
+
+// provides layout settings for output spreadhseet
+function layout(worksheet : ExcelScript.Worksheet, breaks : number[]){
+  // use pointer to prevent unecessary worksheet calls 
+  let tgtFormat : ExcelScript.RangeFormat;
+
+  // layout settings for left side column (course names)
+  tgtFormat = worksheet.getRange("A:A").getFormat();
+  tgtFormat.setColumnWidth(leftColWidth);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+
+  // layout settings for right side column (bookings links)
+  tgtFormat =  worksheet.getRange("H:H").getFormat();
+  tgtFormat.setColumnWidth(rightColWidth);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+
+  // center and adjust width/height of day columns to ensure numbers show correctly
+  tgtFormat = worksheet.getRange("B:G").getFormat();
+  tgtFormat.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  tgtFormat.setColumnWidth(100);
+  tgtFormat.setWrapText(true);
+  tgtFormat.autofitRows();
+
+  // merge cells at course breaks 
+  for(let i = 0; i < breaks.length; i++){
+    let moveVal = worksheet.getRangeByIndexes(breaks[i]+1,0,1,1).getText();
+    worksheet.getRangeByIndexes(breaks[i],0,2,1).merge();
+    worksheet.getRangeByIndexes(breaks[i], 0, 1, 1).setValue(moveVal);
+    worksheet.getRangeByIndexes(breaks[i],1,1,6).merge();
+  }
+}
+
+// provides styling settings for output spreadsheet
+function styling(worksheet : ExcelScript.Worksheet, breaks : number[]){
+  // prevent uncessary calls to sheet by getting a RangeFormat object for each group of changes
+  let tgtFmt : ExcelScript.RangeFormat;
+  
+  for(let i = 0; i < breaks.length; i++){
+    // styling for course name cell
+    tgtFmt = worksheet.getRangeByIndexes(breaks[i], 0, 1, 1).getFormat();
+    tgtFmt.getFill().setColor("c9daf8");
+    tgtFmt.getFont().setBold(true);
+    tgtFmt.getFont().setSize(18);
+    tgtFmt.getFont().setName("Times New Roman");
+    tgtFmt.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+
+    // styling for "On Campus Walk-In Hours"
+    tgtFmt = worksheet.getRangeByIndexes(breaks[i],1,1,1).getFormat();
+    tgtFmt.getFill().setColor(middleColor);
+    tgtFmt.getFont().setBold(true);
+    tgtFmt.getFont().setSize(18);
+    tgtFmt.getFont().setName("Times New Roman");
+
+    // styling for day labels
+    tgtFmt = worksheet.getRangeByIndexes(breaks[i]+1, 1, 1, 6).getFormat();
+    tgtFmt.getFill().setColor(middleColor);
+    tgtFmt.getFont().setName("Times New Roman");
+
+    // styling for remote session link labels (2 rows)
+    tgtFmt = worksheet.getRangeByIndexes(breaks[i],7, 2, 1).getFormat();
+    tgtFmt.getFill().setColor(rightColor);
+    tgtFmt.getFont().setName("Times New Roman");
+    tgtFmt.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+
+    // styling for "Remote Session Links"
+    tgtFmt = worksheet.getRangeByIndexes(breaks[i],7,1,1).getFormat();
+    tgtFmt.getFont().setSize(18);
+    tgtFmt.getFont().setBold(true);
+  }
+}
+
+// provides formatting settings for output spreadsheet, including data formats.
+// Should be called before data is placed in spreadhseet 
+function format(targetSheet : ExcelScript.Worksheet){
+  // set first seven columns to "text" format
+  targetSheet.getRange("A:G").setNumberFormatLocal("@"); 
+
+  // set last column to "general" format so links will be interpreted
+  targetSheet.getRange("H:H").setNumberFormatLocal("general"); // bookings link
+}
+
+function addHeader(targetSheet : ExcelScript.Worksheet){
+  // variables used to reduce calls to sheet 
+  let tgtRange : ExcelScript.Range;
+  let tgtFormat : ExcelScript.RangeFormat;
+  let tgtFont : ExcelScript.RangeFont;
+
+  // insert two new rows at the top of the worksheet 
+  tgtRange = targetSheet.getRange("1:2").insert(ExcelScript.InsertShiftDirection.down);
+  
+  // apply layout and styling settings to the first row
+  tgtRange = targetSheet.getRange("A1:H1");
+  tgtRange.merge();
+  tgtRange.setValue("Learning Center Schedule by Courses - [SEMESTER HERE]\nlearningcenter@harford.edu\n443-412-2588");
+  tgtFormat = tgtRange.getFormat();
+  tgtFont = tgtFormat.getFont();
+  tgtFont.setSize(24);
+  tgtFont.setBold(true);
+  tgtFont.setName("Times New Roman");
+  tgtFont.setColor("FFFFFF");
+  tgtFormat.getFill().setColor(topBannerColor);
+  tgtFormat.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  tgtFormat.setRowHeight(100);
+
+  // apply layout and styling settings for second row left box 
+  tgtRange = targetSheet.getRange("A2:A2");
+  tgtRange.setValue("Scroll Down to Find The Course You Need\nAssistance With");
+  tgtFormat = tgtRange.getFormat();
+  tgtFont = tgtFormat.getFont();
+  tgtFont.setSize(16);
+  tgtFont.setName("Times New Roman");
+  tgtFormat.getFill().setColor(leftColor);
+  tgtFormat.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  tgtFormat.setRowHeight(100);
+
+  // apply layout and styling settings for second row middle box
+  tgtRange = targetSheet.getRange("B2:G2");
+  tgtRange.merge();
+  tgtRange.setValue("For in person assistance, view walk-in hours for the Learning Center\n(Located in Library 115)");
+  tgtFormat = tgtRange.getFormat();
+  tgtFont = tgtFormat.getFont();
+  tgtFont.setSize(16);
+  tgtFont.setName("Times New Roman");
+  tgtFormat.getFill().setColor(middleColor);
+  tgtFormat.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+
+  // apply layout and styling settings for second row right box 
+  tgtRange = targetSheet.getRange("H2:H2");
+  tgtRange.merge();
+  tgtRange.setValue("For remote assistance, book a Microsoft Teams appointment by clicking on a link below");
+  tgtFormat = tgtRange.getFormat();
+  tgtFont = tgtFormat.getFont();
+  tgtFont.setSize(16);
+  tgtFont.setName("Times New Roman");
+  tgtFormat.getFill().setColor(rightColor);
+  tgtFormat.setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+  tgtFormat.setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+  tgtFormat.setWrapText(true);
+
+
+}
+
+function addAllBorders(tgtRange : ExcelScript.Range){
+  // set borders for all cells
+  let tgtFmt = tgtRange.getFormat();
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setColor("000000");
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setWeight(ExcelScript.BorderWeight.thin);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.insideVertical).setStyle(ExcelScript.BorderLineStyle.continuous);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.insideVertical).setColor("000000");
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.insideVertical).setWeight(ExcelScript.BorderWeight.thin);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setStyle(ExcelScript.BorderLineStyle.continuous);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setColor("000000");
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setWeight(ExcelScript.BorderWeight.thin);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeTop).setStyle(ExcelScript.BorderLineStyle.continuous);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeTop).setColor("000000");
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeTop).setWeight(ExcelScript.BorderWeight.thin);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setStyle(ExcelScript.BorderLineStyle.continuous);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setColor("000000");
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setWeight(ExcelScript.BorderWeight.thin);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setStyle(ExcelScript.BorderLineStyle.continuous);
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setColor("000000");
+  tgtFmt.getRangeBorder(ExcelScript.BorderIndex.edgeRight).setWeight(ExcelScript.BorderWeight.thin);
+}
+
+function findGaps(content : string[][]){
+  let gaps : number[] = [];
+  for(let i = 0; i < content.length; i++){
+    if(content[i][0] == ""){
+      gaps.push(i);
+    }
+  }
+  return gaps;
+}
+
+function findUnscheduled(content : string[][]){
+  let unscheduledRows : number[] = [];
+  for(let i = 0; i < content.length; i++){
+    if (content[i][0] != "" && content[i][1] == "" && content[i][2] == "" && content[i][3] == "" && content[i][4] == "" && content[i][5] == "" && content[i][6] == ""){
+      unscheduledRows.push(i);
+    }
+  }
+  return unscheduledRows;
+}
+
+function main(workbook : ExcelScript.Workbook) {
+
+  let groupTables = workbook.getWorksheet("Owlnet Course Groups").getTables();
+  let groupXlTables = makeXlTables(groupTables);
+  let assistants = buildLearningAssistantsFromWorkbook(workbook.getWorksheet("Automate Schedule"));
+  let courses = buildCourses(workbook.getWorksheet("Courses transpose"), assistants, groupXlTables);
+
+  OwlnetSchedule.transposeOmissions(courses, groupXlTables);
+  OwlnetSchedule.assignBookingsLinks(courses, groupXlTables);
+  let outputArry = OwlnetSchedule.output(courses, groupXlTables);
+  output(outputArry, "Owlnet Source",workbook).activate();
+console.log(assistants);
+}
